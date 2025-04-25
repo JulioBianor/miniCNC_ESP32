@@ -1,2 +1,5 @@
 libs:
   https://github.com/ESP32Async
+
+Littlefs Upload Data Tool (IDE 2.x):
+  https://github.com/earlephilhower/arduino-littlefs-upload
