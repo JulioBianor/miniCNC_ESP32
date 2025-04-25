@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Painel CNC ESP32</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 20px;
+      background: #f0f0f0;
+      text-align: center;
+    }
+
+    h2 {
+      margin-bottom: 20px;
+      font-size: 2em;
+    }
+
+    .grid {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    button {
+      flex: 1 1 100px;
+      max-width: 120px;
+      padding: 15px;
+      font-size: 1rem;
+      border: none;
+      border-radius: 5px;
+      background-color: #1976d2;
+      color: white;
+      cursor: pointer;
+      transition: background-color 0.3s ease;
+    }
+
+    button:hover {
+      background-color: #125ea5;
+    }
+
+    #coords {
+      font-size: 1.2rem;
+      background: #fff;
+      padding: 10px;
+      border-radius: 5px;
+      display: inline-block;
+    }
+
+    @media (max-width: 480px) {
+      h2 { font-size: 1.5em; }
+      button { font-size: 0.9rem; padding: 10px; }
+      #coords { font-size: 1rem; }
+    }
+  </style>
+</head>
+<body>
+  <h2>Painel de Controle CNC - ESP32</h2>
+
+  <div class="grid">
+    <button onclick="send('x-')">X−</button>
+    <button onclick="send('x+')">X+</button>
+    <button onclick="send('y-')">Y−</button>
+    <button onclick="send('y+')">Y+</button>
+    <button onclick="send('z-')">Z−</button>
+    <button onclick="send('z+')">Z+</button>
+  </div>
+
+  <div class="grid">
+    <button onclick="send('home')">HOME</button>
+    <button onclick="send('start')">START</button>
+    <button onclick="send('stop')">STOP</button>
+  </div>
+
+  <div id="coords">X: 0 | Y: 0 | Z: 0</div>
+
+  <script>
+    const ws = new WebSocket(`ws://${location.hostname}/ws`);
+
+    ws.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      document.getElementById("coords").innerText =
+        `X: ${data.x} | Y: ${data.y} | Z: ${data.z}`;
+    };
+
+    function send(cmd) {
+      ws.send(cmd);
+    }
+  </script>
+</body>
+</html>
