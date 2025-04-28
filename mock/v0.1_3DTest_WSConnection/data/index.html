@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Painel CNC 3D - ESP32</title>
+
+  <!-- Three.js v0.135.0 -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.135.0/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.135.0/examples/js/controls/OrbitControls.js"></script>
+
+  <style>
+    body { margin: 0; overflow: hidden; background-color: #f0f0f0; }
+    #info {
+      position: absolute; top: 10px; left: 10px;
+      background: rgba(255,255,255,0.8);
+      padding: 10px;
+      border-radius: 5px;
+      font-family: Arial, sans-serif;
+      z-index: 1;
+    }
+    form { position: absolute; top: 10px; right: 10px; z-index: 1; }
+    #status {
+      position: absolute; bottom: 10px; left: 10px;
+      background: rgba(0,0,0,0.7);
+      color: white;
+      padding: 5px 10px;
+      border-radius: 5px;
+      font-family: Arial, sans-serif;
+      z-index: 2;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="info">
+    <h2>Painel CNC ESP32 3D</h2>
+    <p id="coords">X: 0 | Y: 0 | Z: 0 | A: 0</p>
+    <button onclick="listarArquivos()">Atualizar Lista</button>
+    <pre id="fileList"></pre>
+    <input type="text" id="fileName" placeholder="nome.gcode">
+    <button onclick="executarArquivo()">Executar</button>
+  </div>
+
+  <form id="uploadForm" method="POST" enctype="multipart/form-data" action="/upload">
+    <input type="file" name="upload" id="fileInput" required>
+    <button type="submit">Enviar G-code</button>
+  </form>
+
+  <div id="status">Status: Conectando...</div>
+
+  <script>
+    let scene, camera, renderer, cube, workpiece, controls;
+    let ws;
+    let reconnectInterval = 3000;
+    let connected = false;
+
+    let trailGeometry, trailMaterial, trailLine;
+    let trailPositions = [];
+    const maxTrailPoints = 100;
+
+    init();
+    connectWebSocket();
+
+    function init() {
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0xf0f0f0);
+
+      camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+      camera.position.set(60, 60, 60);
+      camera.lookAt(scene.position);
+
+      renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      document.body.appendChild(renderer.domElement);
+
+      // Cores para as faces
+      const colors = [
+        0xff0000, 0x00ff00, // frente, trás
+        0x0000ff, 0xffff00, // direita, esquerda
+        0xff00ff, 0xff8000  // topo, base
+      ];
+
+      // Cubo da ferramenta com faces coloridas
+      const toolGeometry = new THREE.BoxGeometry(5, 5, 5);
+      const toolMaterials = colors.map(color => new THREE.MeshBasicMaterial({ color: color }));
+      cube = new THREE.Mesh(toolGeometry, toolMaterials);
+      scene.add(cube);
+
+      // Peça de trabalho com faces coloridas
+      const pieceGeometry = new THREE.BoxGeometry(50, 10, 50);
+      const pieceMaterials = colors.map(color => new THREE.MeshBasicMaterial({ color: color }));
+      workpiece = new THREE.Mesh(pieceGeometry, pieceMaterials);
+      workpiece.position.y = -5;
+      scene.add(workpiece);
+
+      // Grade no chão
+      const gridHelper = new THREE.GridHelper(300, 30);
+      scene.add(gridHelper);
+
+      // Trilha do movimento
+      trailGeometry = new THREE.BufferGeometry().setFromPoints([]);
+      trailMaterial = new THREE.LineBasicMaterial({ color: 0x0000ff });
+      trailLine = new THREE.Line(trailGeometry, trailMaterial);
+      scene.add(trailLine);
+
+      controls = new THREE.OrbitControls(camera, renderer.domElement);
+
+      window.addEventListener('resize', onWindowResize);
+
+      animate();
+    }
+
+    function animate() {
+      requestAnimationFrame(animate);
+      controls.update();
+      renderer.render(scene, camera);
+    }
+
+    function onWindowResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    function connectWebSocket() {
+      ws = new WebSocket(`ws://${location.hostname}/ws`);
+
+      ws.onopen = () => {
+        connected = true;
+        document.getElementById('status').innerText = "Status: Conectado";
+      };
+
+      ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        if (cube && workpiece) {
+          cube.position.set(data.x, data.z, data.y);
+          workpiece.rotation.y = data.a * Math.PI / 180;
+
+          updateTrail(cube.position);
+        }
+        document.getElementById('coords').innerText =
+          `X: ${data.x.toFixed(1)} | Y: ${data.y.toFixed(1)} | Z: ${data.z.toFixed(1)} | A: ${data.a.toFixed(1)}`;
+      };
+
+      ws.onclose = () => {
+        connected = false;
+        document.getElementById('status').innerText = "Status: Desconectado. Reconectando...";
+        setTimeout(connectWebSocket, reconnectInterval);
+      };
+
+      ws.onerror = (error) => {
+        console.error('WebSocket erro:', error);
+        ws.close();
+      };
+    }
+
+    function updateTrail(position) {
+      if (trailPositions.length >= maxTrailPoints) {
+        trailPositions.shift();
+      }
+      trailPositions.push(position.clone());
+
+      const pointsArray = trailPositions.flatMap(p => [p.x, p.y, p.z]);
+      trailGeometry.setAttribute('position', new THREE.Float32BufferAttribute(pointsArray, 3));
+      trailGeometry.computeBoundingSphere();
+    }
+
+    function listarArquivos() {
+      fetch("/list")
+        .then(response => response.text())
+        .then(data => document.getElementById("fileList").innerText = data);
+    }
+
+    function executarArquivo() {
+      const nomeArquivo = document.getElementById("fileName").value.trim();
+      if (!nomeArquivo) {
+        alert("Por favor, insira o nome do arquivo G-code!");
+        return;
+      }
+      fetch("/run?file=" + encodeURIComponent(nomeArquivo))
+        .then(response => response.text())
+        .then(msg => alert(msg));
+    }
+  </script>
+</body>
+</html>
