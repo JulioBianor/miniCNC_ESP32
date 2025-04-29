@@ -117,6 +117,12 @@
       //spindleCorpo.rotation.x = Math.PI / 2;
       spindleCorpo.position.set(-15, 70, 0);
       scene.add(spindleCorpo);
+      
+      // MesaZ (segunda mesa que se move sobre a mesa Y)
+      const geometriaMesaZ = new THREE.BoxGeometry(60, 20, 20);
+      mesaZ = new THREE.Mesh(geometriaMesaZ, materiaisFaces);
+      mesaZ.position.set(-30, 0, 0);
+      spindleCorpo.add(mesaZ); // MesaZ é filha de Spindle
 
       // Eixo da fresa
       const geometriaEixo = new THREE.CylinderGeometry(2, 2, 10, 16);
@@ -175,8 +181,8 @@
 
     function updatePositions(data) {
       // Atualiza movimentação
-      if (mesaY) mesaY.position.z = data.y; // Eixo Y vira Z na visualização
-      if (mesaX) mesaX.position.x = data.x; // Eixo X
+      if (mesaY) mesaY.position.z = data.x; // Eixo Y vira Z na visualização
+      if (mesaX) mesaX.position.x = data.y; // Eixo X
       if (spindleCorpo) spindleCorpo.position.y = 130 + data.z; // Eixo Z (spindle)
       
       document.getElementById('coords').innerText =
