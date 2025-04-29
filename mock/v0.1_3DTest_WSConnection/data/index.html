@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Painel CNC 3D - ESP32</title>
+  <title>CNC 3D - Controle e Visualização</title>
 
   <!-- Three.js v0.135.0 -->
   <script src="https://cdn.jsdelivr.net/npm/three@0.135.0/build/three.min.js"></script>
@@ -13,7 +13,7 @@
     body { margin: 0; overflow: hidden; background-color: #f0f0f0; }
     #info {
       position: absolute; top: 10px; left: 10px;
-      background: rgba(255,255,255,0.8);
+      background: rgba(255,255,255,0.9);
       padding: 10px;
       border-radius: 5px;
       font-family: Arial, sans-serif;
@@ -33,32 +33,34 @@
 </head>
 
 <body>
+  <!-- Painel de Informações e Controle -->
   <div id="info">
-    <h2>Painel CNC ESP32 3D</h2>
+    <h2>Painel CNC ESP32</h2>
     <p id="coords">X: 0 | Y: 0 | Z: 0 | A: 0</p>
     <button onclick="listarArquivos()">Atualizar Lista</button>
     <pre id="fileList"></pre>
     <input type="text" id="fileName" placeholder="nome.gcode">
-    <button onclick="executarArquivo()">Executar</button>
+    <button onclick="executarArquivo()">Executar Arquivo</button>
   </div>
 
+  <!-- Formulário de Upload -->
   <form id="uploadForm" method="POST" enctype="multipart/form-data" action="/upload">
     <input type="file" name="upload" id="fileInput" required>
     <button type="submit">Enviar G-code</button>
   </form>
 
+  <!-- Status da conexão -->
   <div id="status">Status: Conectando...</div>
 
   <script>
-    let scene, camera, renderer, cube, workpiece, controls;
+    let scene, camera, renderer, controls;
     let ws;
     let reconnectInterval = 3000;
-    let connected = false;
 
-    let trailGeometry, trailMaterial, trailLine;
-    let trailPositions = [];
-    const maxTrailPoints = 100;
+    // Objetos da CNC
+    let corpoBase, corpoColuna, mesaY, mesaX, spindleCorpo, spindleEixo;
 
+    // Inicializa a cena
     init();
     connectWebSocket();
 
@@ -67,47 +69,67 @@
       scene.background = new THREE.Color(0xf0f0f0);
 
       camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-      camera.position.set(60, 60, 60);
+      camera.position.set(200, 200, 200);
       camera.lookAt(scene.position);
 
       renderer = new THREE.WebGLRenderer({ antialias: true });
       renderer.setSize(window.innerWidth, window.innerHeight);
       document.body.appendChild(renderer.domElement);
 
-      // Cores para as faces
-      const colors = [
-        0xff0000, 0x00ff00, // frente, trás
-        0x0000ff, 0xffff00, // direita, esquerda
-        0xff00ff, 0xff8000  // topo, base
-      ];
-
-      // Cubo da ferramenta com faces coloridas
-      const toolGeometry = new THREE.BoxGeometry(5, 5, 5);
-      const toolMaterials = colors.map(color => new THREE.MeshBasicMaterial({ color: color }));
-      cube = new THREE.Mesh(toolGeometry, toolMaterials);
-      scene.add(cube);
-
-      // Peça de trabalho com faces coloridas
-      const pieceGeometry = new THREE.BoxGeometry(50, 10, 50);
-      const pieceMaterials = colors.map(color => new THREE.MeshBasicMaterial({ color: color }));
-      workpiece = new THREE.Mesh(pieceGeometry, pieceMaterials);
-      workpiece.position.y = -5;
-      scene.add(workpiece);
-
-      // Grade no chão
-      const gridHelper = new THREE.GridHelper(300, 30);
-      scene.add(gridHelper);
-
-      // Trilha do movimento
-      trailGeometry = new THREE.BufferGeometry().setFromPoints([]);
-      trailMaterial = new THREE.LineBasicMaterial({ color: 0x0000ff });
-      trailLine = new THREE.Line(trailGeometry, trailMaterial);
-      scene.add(trailLine);
-
       controls = new THREE.OrbitControls(camera, renderer.domElement);
 
-      window.addEventListener('resize', onWindowResize);
+      // ----- Materiais coloridos -----
+      const coresFaces = [
+        0xff0000, 0x00ff00, 0x0000ff,
+        0xffff00, 0xff00ff, 0x00ffff
+      ];
+      const materiaisFaces = coresFaces.map(cor => new THREE.MeshBasicMaterial({ color: cor }));
 
+      // ----- Criação dos blocos da CNC -----
+
+      // Corpo da base horizontal ("L")
+      const geometriaBase = new THREE.BoxGeometry(150, 20, 150);
+      corpoBase = new THREE.Mesh(geometriaBase, materiaisFaces);
+      corpoBase.position.set(0, 10, 0); // Altura metade da base
+      scene.add(corpoBase);
+
+      // Corpo da coluna vertical ("L")
+      const geometriaColuna = new THREE.BoxGeometry(20, 150, 150);
+      corpoColuna = new THREE.Mesh(geometriaColuna, materiaisFaces);
+      corpoColuna.position.set(-65, 85, 0);
+      scene.add(corpoColuna);
+
+      // Mesa Y (primeira mesa que se move no eixo Y)
+      const geometriaMesaY = new THREE.BoxGeometry(100, 10, 100);
+      mesaY = new THREE.Mesh(geometriaMesaY, materiaisFaces);
+      mesaY.position.set(0, 15, 0);
+      scene.add(mesaY);
+
+      // Mesa X (segunda mesa que se move sobre a mesa Y)
+      const geometriaMesaX = new THREE.BoxGeometry(70, 10, 70);
+      mesaX = new THREE.Mesh(geometriaMesaX, materiaisFaces);
+      mesaX.position.set(0, 10, 0);
+      mesaY.add(mesaX); // MesaX é filha de MesaY
+
+      // Spindle (motor principal)
+      const geometriaSpindle = new THREE.CylinderGeometry(5, 5, 40, 32);
+      spindleCorpo = new THREE.Mesh(geometriaSpindle, new THREE.MeshBasicMaterial({ color: 0x555555 }));
+      spindleCorpo.rotation.x = Math.PI / 2;
+      spindleCorpo.position.set(-65, 130, 0);
+      scene.add(spindleCorpo);
+
+      // Eixo da fresa
+      const geometriaEixo = new THREE.CylinderGeometry(1, 1, 10, 16);
+      spindleEixo = new THREE.Mesh(geometriaEixo, new THREE.MeshBasicMaterial({ color: 0xff8000 }));
+      spindleEixo.rotation.x = Math.PI / 2;
+      spindleEixo.position.set(0, -25, 0);
+      spindleCorpo.add(spindleEixo);
+
+      // Grade de chão
+      const gridHelper = new THREE.GridHelper(500, 50);
+      scene.add(gridHelper);
+
+      window.addEventListener('resize', onWindowResize);
       animate();
     }
 
@@ -115,6 +137,11 @@
       requestAnimationFrame(animate);
       controls.update();
       renderer.render(scene, camera);
+
+      // Roda a fresa continuamente
+      if (spindleEixo) {
+        spindleEixo.rotation.z += 0.1;
+      }
     }
 
     function onWindowResize() {
@@ -127,24 +154,15 @@
       ws = new WebSocket(`ws://${location.hostname}/ws`);
 
       ws.onopen = () => {
-        connected = true;
         document.getElementById('status').innerText = "Status: Conectado";
       };
 
       ws.onmessage = (event) => {
         const data = JSON.parse(event.data);
-        if (cube && workpiece) {
-          cube.position.set(data.x, data.z, data.y);
-          workpiece.rotation.y = data.a * Math.PI / 180;
-
-          updateTrail(cube.position);
-        }
-        document.getElementById('coords').innerText =
-          `X: ${data.x.toFixed(1)} | Y: ${data.y.toFixed(1)} | Z: ${data.z.toFixed(1)} | A: ${data.a.toFixed(1)}`;
+        updatePositions(data);
       };
 
       ws.onclose = () => {
-        connected = false;
         document.getElementById('status').innerText = "Status: Desconectado. Reconectando...";
         setTimeout(connectWebSocket, reconnectInterval);
       };
@@ -155,15 +173,14 @@
       };
     }
 
-    function updateTrail(position) {
-      if (trailPositions.length >= maxTrailPoints) {
-        trailPositions.shift();
-      }
-      trailPositions.push(position.clone());
-
-      const pointsArray = trailPositions.flatMap(p => [p.x, p.y, p.z]);
-      trailGeometry.setAttribute('position', new THREE.Float32BufferAttribute(pointsArray, 3));
-      trailGeometry.computeBoundingSphere();
+    function updatePositions(data) {
+      // Atualiza movimentação
+      if (mesaY) mesaY.position.z = data.y; // Eixo Y vira Z na visualização
+      if (mesaX) mesaX.position.x = data.x; // Eixo X
+      if (spindleCorpo) spindleCorpo.position.y = 130 + data.z; // Eixo Z (spindle)
+      
+      document.getElementById('coords').innerText =
+        `X: ${data.x.toFixed(1)} | Y: ${data.y.toFixed(1)} | Z: ${data.z.toFixed(1)} | A: ${data.a.toFixed(1)}`;
     }
 
     function listarArquivos() {
