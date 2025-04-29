@@ -88,38 +88,38 @@
       // ----- Criação dos blocos da CNC -----
 
       // Corpo da base horizontal ("L")
-      const geometriaBase = new THREE.BoxGeometry(150, 20, 150);
+      const geometriaBase = new THREE.BoxGeometry(120, 20, 30);
       corpoBase = new THREE.Mesh(geometriaBase, materiaisFaces);
-      corpoBase.position.set(0, 10, 0); // Altura metade da base
+      corpoBase.position.set(-15, 10, 0); // Altura metade da base
       scene.add(corpoBase);
 
       // Corpo da coluna vertical ("L")
-      const geometriaColuna = new THREE.BoxGeometry(20, 150, 150);
+      const geometriaColuna = new THREE.BoxGeometry(20, 150, 30);
       corpoColuna = new THREE.Mesh(geometriaColuna, materiaisFaces);
       corpoColuna.position.set(-65, 85, 0);
       scene.add(corpoColuna);
 
       // Mesa Y (primeira mesa que se move no eixo Y)
-      const geometriaMesaY = new THREE.BoxGeometry(100, 10, 100);
+      const geometriaMesaY = new THREE.BoxGeometry(40, 10, 40);
       mesaY = new THREE.Mesh(geometriaMesaY, materiaisFaces);
-      mesaY.position.set(0, 15, 0);
+      mesaY.position.set(0, 25, 0);
       scene.add(mesaY);
 
       // Mesa X (segunda mesa que se move sobre a mesa Y)
-      const geometriaMesaX = new THREE.BoxGeometry(70, 10, 70);
+      const geometriaMesaX = new THREE.BoxGeometry(40, 10, 100);
       mesaX = new THREE.Mesh(geometriaMesaX, materiaisFaces);
       mesaX.position.set(0, 10, 0);
       mesaY.add(mesaX); // MesaX é filha de MesaY
 
       // Spindle (motor principal)
-      const geometriaSpindle = new THREE.CylinderGeometry(5, 5, 40, 32);
+      const geometriaSpindle = new THREE.CylinderGeometry(10, 10, 40, 32);
       spindleCorpo = new THREE.Mesh(geometriaSpindle, new THREE.MeshBasicMaterial({ color: 0x555555 }));
-      spindleCorpo.rotation.x = Math.PI / 2;
-      spindleCorpo.position.set(-65, 130, 0);
+      //spindleCorpo.rotation.x = Math.PI / 2;
+      spindleCorpo.position.set(-15, 70, 0);
       scene.add(spindleCorpo);
 
       // Eixo da fresa
-      const geometriaEixo = new THREE.CylinderGeometry(1, 1, 10, 16);
+      const geometriaEixo = new THREE.CylinderGeometry(2, 2, 10, 16);
       spindleEixo = new THREE.Mesh(geometriaEixo, new THREE.MeshBasicMaterial({ color: 0xff8000 }));
       spindleEixo.rotation.x = Math.PI / 2;
       spindleEixo.position.set(0, -25, 0);
